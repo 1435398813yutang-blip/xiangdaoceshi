@@ -1,0 +1,289 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>向导系统 - 公告后台管理</title>
+    <style>
+        :root {
+            --black: #000000; --white: #FFFFFF; --gray-10: #1A1A1A; --gray-20: #333333;
+            --gray-40: #666666; --gray-80: #CCCCCC; --gray-90: #E6E6E6; --gray-95: #F2F2F2;
+            --primary: var(--black); --background: var(--white); --surface: var(--white);
+            --border: var(--gray-90); --text: var(--black); --text-secondary: var(--gray-40);
+            --border-radius: 2px; --spacing-xs: 3px; --spacing-sm: 6px; --spacing-md: 12px; --spacing-lg: 16px;
+            --font-sm: 12px; --font-md: 13px; --font-lg: 14px;
+        }
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Microsoft YaHei', sans-serif; background-color: var(--background); color: var(--text); font-size: var(--font-md); line-height: 1.4; }
+        .container { max-width: 800px; margin: 0 auto; padding: var(--spacing-lg); }
+        .header { text-align: center; margin-bottom: var(--spacing-lg); border-bottom: 1px solid var(--border); padding-bottom: var(--spacing-sm); }
+        .header h1 { font-family: 'SimSun', 'STSong', serif; font-size: 24px; font-weight: 300; }
+        
+        .form-group { margin-bottom: var(--spacing-md); }
+        .form-label { display: block; margin-bottom: var(--spacing-xs); font-size: var(--font-sm); font-weight: 500; }
+        .form-input, .form-textarea { width: 100%; padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--border); border-radius: var(--border-radius); font-size: var(--font-md); font-family: inherit; }
+        .form-input:focus, .form-textarea:focus { outline: none; border-color: var(--primary); }
+        .form-textarea { resize: vertical; min-height: 100px; }
+        .form-row { display: flex; gap: var(--spacing-md); }
+        .form-row .form-group { flex: 1; }
+        
+        .btn-row { display: flex; gap: var(--spacing-md); margin-bottom: var(--spacing-lg); }
+        .btn { padding: var(--spacing-sm) var(--spacing-md); border: 1px solid var(--primary); background: var(--primary); color: var(--background); border-radius: var(--border-radius); cursor: pointer; font-size: var(--font-sm); font-weight: 500; text-align: center; flex: 1; }
+        .btn:hover { opacity: 0.8; }
+        .btn-secondary { background: transparent; color: var(--primary); border-color: var(--border); }
+        .btn-secondary:hover { background: var(--gray-95); }
+        .btn-danger { background: transparent; color: #8B0000; border-color: #8B0000; }
+        
+        .list-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-md); border-top: 1px solid var(--border); padding-top: var(--spacing-lg); }
+        .list-header h2 { font-size: 16px; font-weight: 500; }
+        
+        .announce-card { border: 1px solid var(--border); border-radius: var(--border-radius); padding: var(--spacing-md); margin-bottom: var(--spacing-md); background: var(--surface); position: relative; }
+        .announce-card.pinned { border-color: var(--primary); }
+        .card-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: var(--spacing-sm); }
+        .card-title { font-weight: bold; font-size: var(--font-lg); }
+        .card-time { font-size: var(--font-sm); color: var(--text-secondary); }
+        .card-content { font-size: var(--font-sm); margin-bottom: var(--spacing-md); color: var(--text-secondary); white-space: pre-wrap; }
+        .card-sign { text-align: right; font-size: var(--font-sm); color: var(--text-secondary); margin-bottom: var(--spacing-md); font-style: italic; }
+        .card-actions { display: flex; gap: var(--spacing-sm); justify-content: flex-end; }
+        .card-actions .btn { flex: none; padding: 4px 12px; font-size: var(--font-sm); }
+        
+        .pin-badge { position: absolute; top: 0; right: 0; background: var(--primary); color: var(--background); font-size: 10px; padding: 2px 8px; border-radius: 0 0 0 4px; }
+    </style>
+</head>
+<body>
+<div class="container">
+    <div class="header">
+        <h1>向导系统公告后台管理</h1>
+    </div>
+
+    <input type="hidden" id="editId">
+    
+    <div class="form-group">
+        <label class="form-label">公告标题</label>
+        <input type="text" id="annTitle" class="form-input" placeholder="例如：系统维护公告">
+    </div>
+    
+    <div class="form-group">
+        <label class="form-label">公告内容</label>
+        <textarea id="annContent" class="form-textarea" placeholder="请输入公告详细内容..."></textarea>
+    </div>
+
+    <div class="form-row">
+        <div class="form-group">
+            <label class="form-label">落款名字 (可选)</label>
+            <input type="text" id="annSignName" class="form-input" placeholder="例如：塔·人事部">
+        </div>
+        <div class="form-group">
+            <label class="form-label">落款日期 (可选)</label>
+            <input type="text" id="annSignDate" class="form-input" placeholder="例如：2026年11月14日">
+        </div>
+    </div>
+
+    <div class="form-group">
+        <label class="form-label">发布时间 (时间戳)</label>
+        <input type="text" id="annTime" class="form-input">
+    </div>
+
+    <div class="form-group" style="display: flex; align-items: center; gap: 8px;">
+        <input type="checkbox" id="annPinned" style="width: 16px; height: 16px;">
+        <label for="annPinned" class="form-label" style="margin: 0; cursor: pointer;">是否置顶此公告</label>
+    </div>
+
+    <div class="btn-row">
+        <button class="btn" id="saveBtn">保存 / 更新公告</button>
+        <button class="btn btn-secondary" id="cancelBtn" style="display: none;">取消编辑</button>
+    </div>
+
+    <div class="list-header">
+        <h2>已有公告列表</h2>
+        <div style="display:flex; gap:8px;">
+            <button class="btn btn-secondary" id="importBtn" style="flex: none; width: 120px;">导入 JSON</button>
+            <input type="file" id="importFile" accept=".json" style="display: none;">
+            <button class="btn" id="exportBtn" style="flex: none; width: 120px; background: #333;">导出 JSON</button>
+        </div>
+    </div>
+
+    <div id="announceList"></div>
+</div>
+
+<script>
+    const STORAGE_KEY = 'admin_announcements_data';
+    let announcements = [];
+
+    function getCurrentTime() {
+        const now = new Date();
+        const y = now.getFullYear();
+        const m = String(now.getMonth() + 1).padStart(2, '0');
+        const d = String(now.getDate()).padStart(2, '0');
+        const h = String(now.getHours()).padStart(2, '0');
+        const min = String(now.getMinutes()).padStart(2, '0');
+        return `${y}-${m}-${d} ${h}:${min}`;
+    }
+
+    function loadData() {
+        const data = localStorage.getItem(STORAGE_KEY);
+        if (data) {
+            try { announcements = JSON.parse(data); } catch(e) { announcements = []; }
+        } else {
+            announcements = [];
+        }
+        renderList();
+    }
+
+    function saveData() {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(announcements));
+        renderList();
+    }
+
+    function renderList() {
+        const listEl = document.getElementById('announceList');
+        if (announcements.length === 0) {
+            listEl.innerHTML = '<div style="text-align:center; color:var(--text-secondary); padding:20px;">暂无公告，请在上方添加</div>';
+            return;
+        }
+
+        announcements.sort((a, b) => {
+            if (a.isPinned && !b.isPinned) return -1;
+            if (!a.isPinned && b.isPinned) return 1;
+            return b.time.localeCompare(a.time);
+        });
+
+        listEl.innerHTML = announcements.map(ann => `
+            <div class="announce-card ${ann.isPinned ? 'pinned' : ''}">
+                ${ann.isPinned ? '<div class="pin-badge">置顶</div>' : ''}
+                <div class="card-header">
+                    <div class="card-title">${ann.title}</div>
+                    <div class="card-time">${ann.time}</div>
+                </div>
+                <div class="card-content">${ann.content}</div>
+                ${(ann.signName || ann.signDate) ? `<div class="card-sign">${ann.signName || ''}<br>${ann.signDate || ''}</div>` : ''}
+                <div class="card-actions">
+                    <button class="btn btn-secondary" onclick="editAnnouncement('${ann.id}')">编辑</button>
+                    <button class="btn btn-danger" onclick="deleteAnnouncement('${ann.id}')">删除</button>
+                </div>
+            </div>
+        `).join('');
+    }
+
+    document.getElementById('saveBtn').addEventListener('click', () => {
+        const id = document.getElementById('editId').value;
+        const title = document.getElementById('annTitle').value.trim();
+        const content = document.getElementById('annContent').value.trim();
+        const time = document.getElementById('annTime').value.trim();
+        const isPinned = document.getElementById('annPinned').checked;
+        const signName = document.getElementById('annSignName').value.trim();
+        const signDate = document.getElementById('annSignDate').value.trim();
+
+        if (!title || !content || !time) {
+            alert('请填写完整的标题、内容和时间！');
+            return;
+        }
+
+        if (id) {
+            const index = announcements.findIndex(a => a.id === id);
+            if (index > -1) {
+                announcements[index] = { id, title, content, time, isPinned, signName, signDate };
+            }
+        } else {
+            const newAnn = {
+                id: Date.now().toString(),
+                title,
+                content,
+                time,
+                isPinned,
+                signName,
+                signDate
+            };
+            announcements.push(newAnn);
+        }
+
+        saveData();
+        resetForm();
+    });
+
+    document.getElementById('cancelBtn').addEventListener('click', resetForm);
+
+    window.editAnnouncement = function(id) {
+        const ann = announcements.find(a => a.id === id);
+        if (!ann) return;
+        
+        document.getElementById('editId').value = ann.id;
+        document.getElementById('annTitle').value = ann.title;
+        document.getElementById('annContent').value = ann.content;
+        document.getElementById('annTime').value = ann.time;
+        document.getElementById('annPinned').checked = ann.isPinned;
+        document.getElementById('annSignName').value = ann.signName || '';
+        document.getElementById('annSignDate').value = ann.signDate || '';
+        
+        document.getElementById('cancelBtn').style.display = 'block';
+        window.scrollTo(0, 0);
+    };
+
+    window.deleteAnnouncement = function(id) {
+        if (!confirm('确定要删除这条公告吗？')) return;
+        announcements = announcements.filter(a => a.id !== id);
+        saveData();
+    };
+
+    function resetForm() {
+        document.getElementById('editId').value = '';
+        document.getElementById('annTitle').value = '';
+        document.getElementById('annContent').value = '';
+        document.getElementById('annTime').value = getCurrentTime();
+        document.getElementById('annPinned').checked = false;
+        document.getElementById('annSignName').value = '';
+        document.getElementById('annSignDate').value = '';
+        document.getElementById('cancelBtn').style.display = 'none';
+    }
+
+    // 导出 JSON
+    document.getElementById('exportBtn').addEventListener('click', () => {
+        if (announcements.length === 0) {
+            alert('当前没有公告可以导出！');
+            return;
+        }
+        const jsonStr = JSON.stringify(announcements, null, 2);
+        const blob = new Blob([jsonStr], { type: 'application/json' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = 'announcements.json';
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+    });
+
+    // 导入 JSON
+    document.getElementById('importBtn').addEventListener('click', () => {
+        document.getElementById('importFile').click();
+    });
+    document.getElementById('importFile').addEventListener('change', (e) => {
+        const file = e.target.files[0];
+        if (!file) return;
+        const reader = new FileReader();
+        reader.onload = (event) => {
+            try {
+                const parsed = JSON.parse(event.target.result);
+                if (Array.isArray(parsed)) {
+                    if(confirm('导入将覆盖当前列表的所有数据，确定继续吗？')) {
+                        announcements = parsed;
+                        saveData();
+                        alert('导入成功！数据已恢复至本地草稿。');
+                    }
+                } else {
+                    alert('文件格式错误：必须是一个 JSON 数组。');
+                }
+            } catch (err) {
+                alert('解析文件失败，请确认是有效的 JSON 文件。');
+            }
+            e.target.value = '';
+        };
+        reader.readAsText(file);
+    });
+
+    loadData();
+    resetForm();
+</script>
+</body>
+</html>
