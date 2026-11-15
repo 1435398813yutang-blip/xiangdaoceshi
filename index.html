@@ -2498,7 +2498,8 @@ const PERSISTENT_FIELDS = [
     'totalPurifyCost',
     'totalTrainingEnergy',
     'totalExamPassed',
-    'recentSchedule'
+    'recentSchedule',
+    'readAnnouncementIds'
 ];
 
 // ==================== 游戏全局状态 v5.6.6 ====================
@@ -3080,8 +3081,9 @@ pendingCrossCycleBonus: 0,
 totalExams: 0,
 totalPurifyCost: 0,
 totalTrainingEnergy: 0,
-totalExamPassed: 0,
-recentSchedule: []
+    totalExamPassed: 0,
+    recentSchedule: [],
+    readAnnouncementIds: []
 };
 
 // ==================== 完整的精神体数据库 v5.6.6 ====================
@@ -7793,8 +7795,9 @@ gameData.examRecords = data.examRecords || [];
             gameData.warningTriggered = data.warningTriggered || { mentalDanger: false, mentalCritical: false, stabilityDanger: false, stabilityCritical: false };
             gameData.activeEffects = data.activeEffects || { aromatherapy: false, nutrition: { active: false, remainingDays: 0 }, barrier: { active: false, remainingDays: 0 } };
             gameData.spiritTypeFlags = data.spiritTypeFlags || { firstExtinct: false, firstMythical: false, extinctCount: 0, mythicalCount: 0, extinctStreak: 0, mythicalStreak: 0 };
-            gameData.cycleHistory = data.cycleHistory || [];
-            gameData.resignUsed = data.resignUsed || false;
+gameData.cycleHistory = data.cycleHistory || [];
+gameData.readAnnouncementIds = data.readAnnouncementIds || [];
+gameData.resignUsed = data.resignUsed || false;
 gameData.bulletins = data.bulletins || [];
 gameData.bulletinUnread = data.bulletinUnread || false;
 gameData.playerHomeTower = data.playerHomeTower || null;
@@ -8707,7 +8710,13 @@ async function removeSentinel(sentinelId) {
 function getWeightedRandom(items, weights) { const total = weights.reduce((a, b) => a + b, 0); let rand = Math.random() * total; for (let i = 0; i < items.length; i++) { rand -= weights[i]; if (rand <= 0) return items[i]; } return items[items.length - 1]; }
 function getWeightedRandomIndex(weights) { const total = weights.reduce((a, b) => a + b, 0); let rand = Math.random() * total; for (let i = 0; i < weights.length; i++) { rand -= weights[i]; if (rand <= 0) return i; } return weights.length - 1; }
 
-function renderGame() { updatePlayerDisplay(); updateInfoPanel(); updateTowerDateDisplay(); renderSentinelList(); }
+function renderGame() { 
+    updatePlayerDisplay(); 
+    updateInfoPanel(); 
+    updateTowerDateDisplay(); 
+    renderSentinelList(); 
+    if (typeof fetchAnnouncements === 'function') fetchAnnouncements();
+}
 
 function updatePlayerDisplay() {
     const p = gameData.player; if (!p) return;
@@ -9949,24 +9958,168 @@ function updateBulletinBadge() {
 
 // 显示公告栏弹窗
 let currentBulletinIndex = 0;
+let currentBulletinTab = 'system';
+let systemAnnouncements = [];
 
-function showBulletinModal() {
-    // 无论是否有公告，只要点开了，就清除未读状态
-    gameData.bulletinUnread = false;
-    updateBulletinBadge();
-    updateCommBadges(); 
-    
-    if (!gameData.bulletins || gameData.bulletins.length === 0) {
-        showCustomModal('公告栏', '<div class="bulletin-empty">暂无公告记录</div>', [{ text: '关闭', value: true, className: 'btn' }]);
-        return;
+// 拉取系统公告
+async function fetchAnnouncements() {
+    try {
+        const res = await fetch('./announcements.json?t=' + Date.now());
+        if (res.ok) {
+            systemAnnouncements = await res.json();
+            // 排序：置顶优先，时间倒序
+            systemAnnouncements.sort((a, b) => {
+                if (a.isPinned && !b.isPinned) return -1;
+                if (!a.isPinned && b.isPinned) return 1;
+                return b.time.localeCompare(a.time);
+            });
+            updateBulletinBadge();
+        }
+    } catch (e) {
+        console.log('读取系统公告失败，可能未部署在服务器环境或暂无公告');
+    }
+}
+
+// 检查是否有未读系统公告
+function hasUnreadAnnouncements() {
+    if (!systemAnnouncements || systemAnnouncements.length === 0) return false;
+    if (!gameData.readAnnouncementIds) gameData.readAnnouncementIds = [];
+    return systemAnnouncements.some(a => !gameData.readAnnouncementIds.includes(a.id));
+}
+
+// 更新侧边栏红点
+function updateBulletinBadge() {
+    const badge = document.getElementById('bulletinBadge');
+    const hasNewsUnread = gameData.bulletinUnread || false;
+    const hasSysUnread = hasUnreadAnnouncements();
+    if (badge) {
+        badge.style.display = (hasNewsUnread || hasSysUnread) ? 'block' : 'none';
+    }
+    if (typeof updateCommBadges === 'function') {
+        updateCommBadges();
+    }
+}
+
+async function showBulletinModal() {
+    // 如果还没拉取过，先拉取一次
+    if (systemAnnouncements.length === 0) {
+        await fetchAnnouncements();
+    }
+
+    const hasNewsUnread = gameData.bulletinUnread || false;
+    const hasSysUnread = hasUnreadAnnouncements();
+
+    // 智能选择默认 Tab
+    if (hasSysUnread) {
+        currentBulletinTab = 'system';
+    } else if (hasNewsUnread) {
+        currentBulletinTab = 'news';
+    } else {
+        currentBulletinTab = 'system';
+    }
+
+    if (currentBulletinTab === 'news') {
+        gameData.bulletinUnread = false;
+        updateBulletinBadge();
     }
     
     currentBulletinIndex = 0;
     renderBulletinModal();
 }
+
+// 切换 Tab
+window.switchBulletinTab = function(tab) {
+    currentBulletinTab = tab;
+    if (tab === 'news') {
+        gameData.bulletinUnread = false;
+        updateBulletinBadge();
+    }
+    const contentDiv = document.getElementById('customModalContent');
+    if (contentDiv) {
+        contentDiv.innerHTML = getBulletinModalHTML();
+        if (tab === 'news') bindBulletinNav();
+        if (tab === 'system') bindSysAnnounceExpand();
+    }
+};
+
+function getBulletinModalHTML() {
+    let tabsHtml = `
+        <div style="display:flex; border-bottom: 1px solid var(--border); margin-bottom: var(--spacing-md);">
+            <button class="btn ${currentBulletinTab === 'system' ? '' : 'btn-secondary'}" 
+                style="flex:1; border-radius: 2px 2px 0 0; border-bottom: none; min-height: 32px; font-size: var(--font-sm);" 
+                onclick="switchBulletinTab('system')">系统公告</button>
+            <button class="btn ${currentBulletinTab === 'news' ? '' : 'btn-secondary'}" 
+                style="flex:1; border-radius: 2px 2px 0 0; border-bottom: none; min-height: 32px; font-size: var(--font-sm);" 
+                onclick="switchBulletinTab('news')">每日新闻</button>
+        </div>
+        <div id="bulletinContentArea">
+            ${currentBulletinTab === 'system' ? getSystemBulletinHTML() : getBulletinHTML()}
+        </div>
+    `;
+    return `<div style="text-align: left;">${tabsHtml}</div>`;
+}
+
+function getSystemBulletinHTML() {
+    if (!systemAnnouncements || systemAnnouncements.length === 0) {
+        return '<div class="bulletin-empty" style="text-align:center; color:var(--text-secondary); padding:20px;">暂无系统公告</div>';
+    }
+    if (!gameData.readAnnouncementIds) gameData.readAnnouncementIds = [];
+    let html = '<div style="display:flex; flex-direction:column; gap:var(--spacing-sm);">';
+    systemAnnouncements.forEach(ann => {
+        const isRead = gameData.readAnnouncementIds.includes(ann.id);
+        const pinBadge = ann.isPinned ? '<span style="background:var(--primary); color:var(--background); font-size:10px; padding:1px 4px; border-radius:2px; margin-left:6px;">置顶</span>' : '';
+        html += `
+            <div class="sys-ann-card" data-id="${ann.id}" style="border:1px solid var(--border); border-radius:var(--border-radius); overflow:hidden;">
+                <div class="sys-ann-header" style="padding:var(--spacing-sm) var(--spacing-md); background:var(--surface); cursor:pointer; display:flex; justify-content:space-between; align-items:center;">
+                    <div style="font-weight:500; font-size:var(--font-sm); flex:1; padding-right:10px; word-break:break-all;">
+                        ${!isRead ? '<span class="unread-dot" style="display:inline-block; width:6px; height:6px; background:#ff4444; border-radius:50%; margin-right:6px; vertical-align:middle;"></span>' : ''}
+                        ${ann.title} ${pinBadge}
+                    </div>
+                    <div style="font-size:10px; color:var(--text-secondary); white-space:nowrap;">${ann.time}</div>
+                </div>
+                <div class="sys-ann-content" style="display:${isRead ? 'none' : 'block'}; padding:var(--spacing-md); font-size:var(--font-sm); line-height:1.6; border-top:1px dashed var(--border); color:var(--text-secondary);">
+                    <div style="white-space:pre-wrap;">${ann.content}</div>
+                    ${(ann.signName || ann.signDate) ? `
+                    <div style="text-align: right; margin-top: var(--spacing-md); font-style: italic; line-height: 1.5;">
+                        ${ann.signName ? `<div>${ann.signName}</div>` : ''}
+                        ${ann.signDate ? `<div>${ann.signDate}</div>` : ''}
+                    </div>
+                    ` : ''}
+                </div>
+            </div>
+        `;
+    });
+    html += '</div>';
+    return html;
+}
+
+function bindSysAnnounceExpand() {
+    const cards = document.querySelectorAll('.sys-ann-card');
+    cards.forEach(card => {
+        const header = card.querySelector('.sys-ann-header');
+        const content = card.querySelector('.sys-ann-content');
+        const id = card.dataset.id;
+        header.onclick = () => {
+            const isHidden = content.style.display === 'none';
+            if (isHidden) {
+                content.style.display = 'block';
+                if (!gameData.readAnnouncementIds.includes(id)) {
+                    gameData.readAnnouncementIds.push(id);
+                    const dot = header.querySelector('.unread-dot');
+                    if (dot) dot.remove();
+                    saveGameState();
+                    updateBulletinBadge();
+                }
+            } else {
+                content.style.display = 'none';
+            }
+        };
+    });
+}
 // 生成当前公告栏的 HTML 内容（仅内容，不包含模态框外壳）
 function getBulletinHTML() {
     const b = gameData.bulletins[currentBulletinIndex];
+    if (!b) return '<div class="bulletin-empty">暂无新闻记录</div>';
     if (!b) return '<div class="bulletin-empty">数据错误</div>';
     const totalDays = gameData.bulletins.length;
     const currentDayNum = totalDays - currentBulletinIndex;
@@ -10043,8 +10196,11 @@ function bindBulletinNav() {
     }
 }
 function renderBulletinModal() {
-    showCustomModal('公告栏', getBulletinHTML(), [{ text: '我知道了', value: true, className: 'btn' }]).then(() => {});
-    setTimeout(bindBulletinNav, 100);
+    showCustomModal('公告栏', getBulletinModalHTML(), [{ text: '我知道了', value: true, className: 'btn' }]).then(() => {});
+    setTimeout(() => {
+        if (currentBulletinTab === 'news') bindBulletinNav();
+        if (currentBulletinTab === 'system') bindSysAnnounceExpand();
+    }, 100);
 }
 // ==================== AI 助手 · FAQ 系统 ====================
 const FAQ_DATA = [
